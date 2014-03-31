@@ -79,5 +79,13 @@ distance <- merge(distance, spa_data)
 reservations <- readOGR("reservations", "reservation_boundaries_public_private_cm")
 plot(reservations)
 
+mod1 <- aov(deerbrowse ~ EDGE_DIST + DEV_DIST, data=distance)
+summary(mod1)
+
+par(mfcol = c(2,2))
+plot(mod1)
+
 rocky.river <- readOGR("reservations", "reservation_boundaries_public_private_cm_RES__Rocky River Reservation")
 plot(rocky.river)
+
+
