@@ -27,24 +27,6 @@ distance <- read.csv("Dakota_Benjamin_distance.csv")
 disturbance <- read.csv("PCAP Data/pcap-disturbance.csv")[1:4]
 
 #----
-# #Lets manipulate the deer browse so that the ranks are easier to look at
-#----
-# dist.deerbrowse <- colsplit(distance$Deer.Browse.Ratings, "=", c("DBCode", "DBLabel"))
-# distance <- cbind(distance, dist.deerbrowse)
-# 
-# distance$deerbrowse <- 0
-# distance$deerbrowse[distance$DBCode == "None recorded"] <- 7
-# distance$deerbrowse[distance$DBCode == "VL"] <- 0
-# distance$deerbrowse[distance$DBCode == "L"] <- 1
-# distance$deerbrowse[distance$DBCode == "ML"] <- 2
-# distance$deerbrowse[distance$DBCode == "M"] <- 3
-# distance$deerbrowse[distance$DBCode == "MH"] <- 4
-# distance$deerbrowse[distance$DBCode == "H"] <- 6
-# distance$deerbrowse[distance$DBCode == "VH"] <- 7
-# 
-# hist(distance$deerbrowse, breaks = -0.5+0:8, ylim=c(0,120), xlab="Deer Browse Rating")
-
-#----
 #A basic histogram of the deer browse rankings
 #-----
 # Read in the PCAP non-vegetative summary with deer browse data 
@@ -85,19 +67,18 @@ spa_data$RES[spa_data$RES == "Euclis Creek"] <- "Euclid Creek"
 
 
 
-distance <- merge(deerb, spa_data)
+all.distance <- merge(deerb, spa_data)
+distance <- subset(all.distance, Community.type > 41 | deerbrowse != 0)
+distance <- subset(distance, !is.na(distance$deerbrowse))
+distance <- subset(distance, RES == "South Chagrin" | RES == "North Chagrin" | RES == "Bedford" | RES == "Brecksville" | RES == "Rocky River" | RES == "Hinckley" | RES == "Mill Stream Run")
+
 
 # A quick analysis of a model shows that there is significance in the DEV_DIST data on the deer browse. 
-mod1 <- aov(deerbrowse ~ DEV_DIST, data=distance)
-summary(mod1)
-
-#               Df Sum Sq Mean Sq F value Pr(>F)  
-# EDGE_DIST     1    3.3   3.316   1.379 0.2410  
-# DEV_DIST      1    9.3   9.345   3.887 0.0494 *
-#   Residuals   395  949.8   2.404                 
+aovmod <- aov(deerbrowse ~ DEV_DIST * EDGE_DIST, data=distance)
+summary(aovmod)                
 
 par(mfcol = c(2,2))
-plot(mod1)
+plot(aovmod)
 
 #The plots
 par(mfcol = c(1,1))
@@ -120,7 +101,7 @@ plot(rocky.river)
 
 #scatter plot of deer browse level to distance by plot then plot a linear fit
 par(mfcol=c(1,1))
-plot(distance$EDGE_DIST, distance$deerbrowse, main = "Deer Browse by Distance to Nearest Developed Edge", xlab="Distance to Nearest Developed Edge (m)", ylab="Deer Browse Rating")
+plot(distance$DEV_DIST, distance$deerbrowse, main = "Deer Browse by Distance to Nearest Developed Edge", xlab="Distance to Nearest Developed Edge (m)", ylab="Deer Browse Rating")
 
 #regression model
 
@@ -139,16 +120,15 @@ library(Hmisc)
 #A function for standard error
 StdErr <- function(x) sqrt(var(x) / length(x))
 
-distance <- subset(distance, !is.na(distance$deerbrowse))
-mean.dist <- aggregate(distance$EDGE_DIST, list(distance$RES), mean)
-mean.disterr <- aggregate(distance$EDGE_DIST, list(distance$RES), StdErr)
+mean.dist <- aggregate(distance$DEV_DIST, list(distance$RES), mean)
+mean.disterr <- aggregate(distance$DEV_DIST, list(distance$RES), StdErr)
 mean.deer <-aggregate(distance$deerbrowse, list(distance$RES), mean)
 mean.deererr <-aggregate(distance$deerbrowse, list(distance$RES), StdErr)
 
-mean.all <- subset(merge(mean.dist, mean.deer, by = "Group.1")) #, x.x<300 & x.y>0
+mean.all <- merge(mean.dist, mean.deer, by = "Group.1") #, subset x.x<300 & x.y>0
 names(mean.all) <- c("Reservation", "dist", "browse")
 #log scale on the mean
-mean.all$logdeer <- log(mean.all$browse)
+#mean.all$logdeer <- log(mean.all$browse)
 
 par(mfcol=c(1,1))
 #plot(mean.all$dist, mean.all$browse)
@@ -161,16 +141,139 @@ anova(reg2)
 par(mfcol = c(2,2))
 plot(reg2)
 
-# lowess1 <- loess(mean.all$browse ~ mean.all$dist)
-# lines(lowess1)
-# summary(lowess1)
+#distlst <- mean.all$dist[distance$deerbrowse]
+#plot(distlst, distance$deerbrowse)
+     
+#-----
+# Scatter plot of deer browse ratings by distance to edge with coloration to distiguish each plot
+clrs <- c("red", "orange2", "gold", "green", "blue", "violet", "brown4", "black", "pink", "navy", "darkred", "coral", "cyan", "palegreen", "peachpuff", "yellowgreen", "tan")
+clrslst <- clrs[distance$Reservation]
+par(mfcol=c(1,1))
+plot(distance$DEV_DIST, deerbrowse, pch=20, col=clrslst, main = "Deer Browse by Distance to Nearest Developed Edge", xlab="Distance to Nearest Developed Edge (m)", ylab="Deer Browse Rating")
+tot.reg <- lm(deerbrowse ~ DEV_DIST, data=distance)
+abline(tot.reg, col="red")
+summary(tot.reg)
+
+#----
+#read in the reservation map data and do the regressions
+rocky.river <- readOGR("reservations", "reservation_boundaries_public_private_cm_RES__Rocky River Reservation")
+s.chagrin <- readOGR("reservations", "reservation_boundaries_public_private_cm_RES__South Chagrin Reservation")
+n.chagrin <- readOGR("reservations", "reservation_boundaries_public_private_cm_RES__North Chagrin Reservation")
+bedford <- readOGR("reservations", "reservation_boundaries_public_private_cm_RES__Bedford Reservation")
+brecksville <- readOGR("reservations", "reservation_boundaries_public_private_cm_RES__Brecksville Reservation")
+millstreamrun <- readOGR("reservations", "reservation_boundaries_public_private_cm_RES__Mill Stream Run Reservation")
+hinckley <- readOGR("reservations", "reservation_boundaries_public_private_cm_RES__Hinckley Reservation")
+
+rr.reg <- lm(deerbrowse ~ DEV_DIST, data=subset(distance, RES=="Rocky River"))
+sch.reg <- lm(deerbrowse ~ DEV_DIST, data=subset(distance, RES=="South Chagrin"))
+nch.reg <- lm(deerbrowse ~ DEV_DIST, data=subset(distance, RES=="North Chagrin"))
+bdf.reg <- lm(deerbrowse ~ DEV_DIST, data=subset(distance, RES=="Bedford"))
+bre.reg <- lm(deerbrowse ~ DEV_DIST, data=subset(distance, RES=="Brecksville"))
+msr.reg <- lm(deerbrowse ~ DEV_DIST, data=subset(distance, RES=="Mill Stream Run"))
+hink.reg <- lm(deerbrowse ~ DEV_DIST, data=subset(distance, RES=="Hinckley"))
+
+#----
+#plot each reservation
+#-----
+par(mfrow=c(2,7))
+
+plot(deerbrowse ~ DEV_DIST, data=subset(distance, RES=="Rocky River"), main = "Rocky River", ylim=c(0,6))
+abline(rr.reg)
+
+
+plot(deerbrowse ~ DEV_DIST, data=subset(distance, RES=="South Chagrin"), main = "South Chagrin", ylim=c(0,6))
+abline(sch.reg)
+
+plot(deerbrowse ~ DEV_DIST, data=subset(distance, RES=="North Chagrin"), main = "North Chagrin", ylim=c(0,6))
+abline(nch.reg)
+# summary(nch.reg)
+
+plot(deerbrowse ~ DEV_DIST, data=subset(distance, RES=="Bedford"), main = "Bedford", ylim=c(0,6))
+abline(bdf.reg)
+
+plot(deerbrowse ~ DEV_DIST, data=subset(distance, RES=="Brecksville"), main = "Brecksville", ylim=c(0,6))
+abline(bre.reg)
+
+plot(deerbrowse ~ DEV_DIST, data=subset(distance, RES=="Mill Stream Run"), main = "Mill Stream Run", ylim=c(0,6))
+abline(msr.reg)
+
+plot(deerbrowse ~ DEV_DIST, data=subset(distance, RES=="Hinckley"), main = "Hinckley", ylim=c(0,6))
+abline(hink.reg)
+
+plot(rocky.river)
+plot(s.chagrin)
+plot(n.chagrin)
+plot(bedford)
+plot(brecksville)
+plot(millstreamrun)
+plot(hinckley)
+
+
+
+#-----
+# Do it with VIBI Scores
+#-----
+
+par(mfcol=c(1,1))
+plot(distance$DEV_DIST, as.numeric(distance$VIBI), pch=20, col=clrslst, main = "VIBI by Distance to Nearest Developed Edge", xlab="Distance to Nearest Developed Edge (m)", ylab="VIBI Score")
+tot.reg <- lm(as.numeric(VIBI) ~ DEV_DIST, data=distance)
+abline(tot.reg, col="red")
+
+rr.regVIBI <- lm(as.numeric(VIBI) ~ DEV_DIST, data=subset(distance, RES=="Rocky River"))
+sch.regVIBI <- lm(as.numeric(VIBI) ~ DEV_DIST, data=subset(distance, RES=="South Chagrin"))
+nch.regVIBI <- lm(as.numeric(VIBI) ~ DEV_DIST, data=subset(distance, RES=="North Chagrin"))
+bdf.regVIBI <- lm(as.numeric(VIBI) ~ DEV_DIST, data=subset(distance, RES=="Bedford"))
+bre.regVIBI <- lm(as.numeric(VIBI) ~ DEV_DIST, data=subset(distance, RES=="Brecksville"))
+msr.regVIBI <- lm(as.numeric(VIBI) ~ DEV_DIST, data=subset(distance, RES=="Mill Stream Run"))
+hink.regVIBI <- lm(as.numeric(VIBI) ~ DEV_DIST, data=subset(distance, RES=="Hinckley"))
+
+
+#plot each reservation
+
+par(mfrow=c(1,7))
+
+plot(as.numeric(VIBI) ~ DEV_DIST, data=subset(distance, RES=="Rocky River"), main = "Rocky River")
+abline(rr.regVIBI)
+
+
+plot(as.numeric(VIBI) ~ DEV_DIST, data=subset(distance, RES=="South Chagrin"), main = "South Chagrin")
+abline(sch.regVIBI)
+
+plot(as.numeric(VIBI) ~ DEV_DIST, data=subset(distance, RES=="North Chagrin"), main = "North Chagrin")
+abline(nch.regVIBI)
+# summary(nch.reg)
+
+plot(as.numeric(VIBI) ~ DEV_DIST, data=subset(distance, RES=="Bedford"), main = "Bedford")
+abline(bdf.regVIBI)
+
+plot(as.numeric(VIBI) ~ DEV_DIST, data=subset(distance, RES=="Brecksville"), main = "Brecksville")
+abline(bre.regVIBI)
+
+plot(as.numeric(VIBI) ~ DEV_DIST, data=subset(distance, RES=="Mill Stream Run"), main = "Mill Stream Run")
+abline(msr.regVIBI)
+
+plot(as.numeric(VIBI) ~ DEV_DIST, data=subset(distance, RES=="Hinckley"), main = "Hinckley")
+abline(hink.regVIBI)
+
+plot(rocky.river)
+plot(s.chagrin)
+plot(n.chagrin)
+plot(bedford)
+plot(brecksville)
+plot(millstreamrun)
+plot(hinckley)
 
 #----
 #Calculating Moran's I
 #------
-library(ape)
-gisdata <- read.csv("PCAP Data/pcap-gis-data.csv")
-moran.dists <- as.matrix(dist(cbind(gisdata$long, gisdata$lat)))
-moran.dists.inv <- 1/moran.dists
-diag(moran.dists.inv) <- 0
-Moran.I(distance$deerbrowse, moran.dists.inv, na.rm=T)
+# library(ape)
+# gisdata <- read.csv("PCAP Data/pcap-gis-data.csv")
+# plots <- distance$SITE_NAME
+# plots1 <- match(gisdata$plot, plots, nomatch=0)
+# moran.dists <- as.matrix(dist(cbind(gisdata$long, gisdata$lat)))
+# moran.dists.inv <- 1/moran.dists
+# diag(moran.dists.inv) <- 0
+# Moran.I(distance$deerbrowse, moran.dists.inv, na.rm=T)
+# 
+# PCA Analysis
+# First put the data we want in a matrix
